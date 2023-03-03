@@ -1,1 +1,5 @@
-*/.DS_Store
+/.idea
+__pycache__/
+*.py[cod]
+/best_score
+*.DS_Store

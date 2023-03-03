@@ -1,162 +1,248 @@
-import random
+"""
+   #####   ####  #####   ###    #   ####
+     #     #       #     #  #      #
+ *   #     ###     #     # #    #   ###   *
+     #     #       #     #  #   #      #
+     #     ####    #     #   #  #  ####
+
+"""
+
+import curses
+import board
 import time
 
-# Define the game board dimensions
-BOARD_WIDTH = 10
-BOARD_HEIGHT = 20
+BOARD_WIDTH = 11
+BOARD_HEIGHT = 17
 
-# Define the shapes of the Tetris pieces
-SHAPES = [
-    [(0, 0), (1, 0), (0, 1), (1, 1)],  # Square
-    [(0, 0), (1, 0), (2, 0), (3, 0)],  # I-shape
-    [(0, 0), (0, 1), (1, 1), (2, 1)],  # L-shape
-    [(2, 0), (0, 1), (1, 1), (2, 1)],  # Reverse L-shape
-    [(1, 0), (2, 0), (0, 1), (1, 1)],  # S-shape
-    [(0, 0), (1, 0), (1, 1), (2, 1)],  # Z-shape
-    [(1, 0), (0, 1), (1, 1), (2, 1)],  # T-shape
-]
+GAME_WINDOW_WIDTH = 2 * BOARD_WIDTH + 2
+GAME_WINDOW_HEIGHT = BOARD_HEIGHT + 2
 
-# Define the colors of the Tetris pieces
-COLORS = [
-    '\033[91m',  # Red
-    '\033[93m',  # Yellow
-    '\033[92m',  # Green
-    '\033[94m',  # Blue
-    '\033[96m',  # Cyan
-    '\033[95m',  # Magenta
-    '\033[90m',  # Gray
-]
+HELP_WINDOW_WIDTH = 19
+HELP_WINDOW_HEIGHT = 7
 
-# Define the game state
-board = [[0 for x in range(BOARD_WIDTH)] for y in range(BOARD_HEIGHT)]
-score = 0
-level = 1
-lines_cleared = 0
-game_over = False
-current_piece = None
-next_piece = None
+STATUS_WINDOW_HEIGHT = 12
+STATUS_WINDOW_WIDTH = HELP_WINDOW_WIDTH
 
-# Define functions to manipulate the game board
-def add_piece_to_board(piece, position):
-    for x, y in piece:
-        board[position[1] + y][position[0] + x] = piece.index((x, y)) + 1
+TITLE_HEIGHT = 6
 
-def remove_piece_from_board(piece, position):
-    for x, y in piece:
-        board[position[1] + y][position[0] + x] = 0
+LEFT_MARGIN = 3
 
-def is_valid_position(piece, position):
-    for x, y in piece:
-        if position[0] + x < 0 or position[0] + x >= BOARD_WIDTH or \
-           position[1] + y < 0 or position[1] + y >= BOARD_HEIGHT or \
-           board[position[1] + y][position[0] + x] != 0:
-            return False
-    return True
+TITLE_WIDTH = FOOTER_WIDTH = 50
 
-def clear_lines():
-    global board, score, level, lines_cleared
-    lines_to_clear = []
-    for y in range(BOARD_HEIGHT):
-        if all(board[y][x] != 0 for x in range(BOARD_WIDTH)):
-            lines_to_clear.append(y)
-    lines_cleared += len(lines_to_clear)
-    score += len(lines_to_clear) ** 2 * level
-    level = 1 + lines_cleared // 10
-    for y in reversed(lines_to_clear):
-        board.pop(y)
-        board.insert(0, [0 for x in range(BOARD_WIDTH)])
 
-def get_random_piece():
-    return random.choice(SHAPES)
-def print_board():
-    # Clear the screen
-    print('\033[2J\033[H', end='')
+def init_colors():
+    """Init colors"""
 
-    # Print the board
-    for y in range(BOARD_HEIGHT):
-        for x in range(BOARD_WIDTH):
-            if board[y][x] == 0:
-                print('.', end='')
+    curses.init_pair(99, 8, curses.COLOR_BLACK) # 1 - grey
+    curses.init_pair(98, curses.COLOR_CYAN, curses.COLOR_BLACK)
+    curses.init_pair(97, curses.COLOR_RED, curses.COLOR_BLACK)
+    curses.init_pair(96, curses.COLOR_BLACK, curses.COLOR_CYAN)
+    curses.init_pair(95, curses.COLOR_BLACK, curses.COLOR_WHITE)
+
+    curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_BLUE)
+    curses.init_pair(2, curses.COLOR_BLACK, 13) # 13 - pink
+    curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_YELLOW)
+    curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_GREEN)
+    curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_MAGENTA)
+
+
+def init_game_window():
+    """Create and return game window"""
+
+    window = curses.newwin(GAME_WINDOW_HEIGHT, GAME_WINDOW_WIDTH, TITLE_HEIGHT, LEFT_MARGIN)
+    window.nodelay(True)
+    window.keypad(1)
+
+    return window
+
+
+def init_status_window():
+    """Create and return status window"""
+
+    window = curses.newwin(STATUS_WINDOW_HEIGHT, STATUS_WINDOW_WIDTH, TITLE_HEIGHT, GAME_WINDOW_WIDTH + 5)
+    return window
+
+
+def draw_game_window(window):
+    """Draw game window"""
+
+    window.border()
+
+    # draw board
+    for a in range(BOARD_HEIGHT):
+        for b in range(BOARD_WIDTH):
+            if game_board.board[a][b] == 1:
+                window.addstr(a + 1, 2 * b + 1, "  ", curses.color_pair(96))
             else:
-                print(COLORS[board[y][x] - 1] + '#', end='')
-        print()
+                # draw net
+                window.addstr(a + 1, 2 * b + 1, " .", curses.color_pair(99))
 
-    # Print the score and level
-    print('Score: ', score)
-    print('Level: ', level)
-    print('Lines cleared: ', lines_cleared)
+    # draw current block
+    for a in range(game_board.current_block.size()[0]):
+        for b in range(game_board.current_block.size()[1]):
+            if game_board.current_block.shape[a][b] == 1:
+                x = 2 * game_board.current_block_pos[1] + 2 * b + 1
+                y = game_board.current_block_pos[0] + a + 1
+                window.addstr(y, x, "  ", curses.color_pair(game_board.current_block.color))
 
-    # Print the next piece
-    print('Next piece:')
-    for y in range(4):
-        for x in range(4):
-            if (x, y) in next_piece:
-                print(COLORS[SHAPES.index(next_piece)] + '#', end='')
+    if game_board.is_game_over():
+        go_title = " Game Over "
+        ag_title = " Enter - play again "
+
+        window.addstr(int(GAME_WINDOW_HEIGHT*.4), (GAME_WINDOW_WIDTH-len(go_title))//2, go_title, curses.color_pair(95))
+        window.addstr(int(GAME_WINDOW_HEIGHT*.5), (GAME_WINDOW_WIDTH-len(ag_title))//2, ag_title, curses.color_pair(95))
+
+    if pause:
+        p_title = " Pause "
+        window.addstr(int(GAME_WINDOW_HEIGHT * .4), (GAME_WINDOW_WIDTH - len(p_title)) // 2, p_title,
+                      curses.color_pair(95))
+
+    window.refresh()
+
+
+def draw_status_window(window):
+    """Draw status window"""
+
+    if game_board.is_game_over():
+        return
+
+    # hack: avoid clearing (blinking)
+    for row in range(1, STATUS_WINDOW_HEIGHT - 1):
+        window.addstr(row, 2, "".rjust(STATUS_WINDOW_WIDTH - 3, " "))
+
+    window.border()
+
+    window.addstr(1, 2, f"Score: {game_board.score}")
+    window.addstr(2, 2, f"Lines: {game_board.lines}")
+    window.addstr(3, 2, f"Level: {game_board.level}")
+    window.addstr(4, 2, f"Best Score:{game_board.best_score}")
+
+    start_col = int(STATUS_WINDOW_WIDTH / 2 - game_board.next_block.size()[1])
+
+    for row in range(game_board.next_block.size()[0]):
+        for col in range(game_board.next_block.size()[1]):
+            if game_board.next_block.shape[row][col] == 1:
+                window.addstr(6 + row, start_col + 2 * col, "  ", curses.color_pair(game_board.next_block.color))
+
+    window.refresh()
+    pass
+
+
+def draw_help_window():
+    """Draw help window"""
+
+    window = curses.newwin(HELP_WINDOW_HEIGHT, HELP_WINDOW_WIDTH, TITLE_HEIGHT + STATUS_WINDOW_HEIGHT,
+                           GAME_WINDOW_WIDTH + 5)
+
+    window.border()
+
+    window.addstr(1, 2, "Move    - ← ↓ →")
+    window.addstr(2, 2, "Drop    - space")
+    window.addstr(3, 2, "Rotate  - ↑")
+    window.addstr(4, 2, "Pause   - p")
+    window.addstr(5, 2, "Quit    - q")
+
+    window.refresh()
+
+
+def draw_title():
+    """Draw title"""
+
+    window = curses.newwin(TITLE_HEIGHT, TITLE_WIDTH, 1, LEFT_MARGIN)
+    window.addstr(0, 4, "#####  ####  #####  ###    #   ####", curses.color_pair(98))
+    window.addstr(1, 4, "  #    #       #    #  #      #", curses.color_pair(98))
+    window.addstr(2, 4, "  #    ###     #    # #    #   ###", curses.color_pair(98))
+    window.addstr(3, 4, "  #    #       #    #  #   #      #", curses.color_pair(98))
+    window.addstr(4, 4, "  #    ####    #    #   #  #  ####", curses.color_pair(98))
+
+    window.addstr(2, 0, " *", curses.color_pair(97))
+    window.addstr(2, 41, " *", curses.color_pair(97))
+
+    window.refresh()
+
+
+def draw_footer():
+    title = "Made By Cal_theDevGirl"
+    window = curses.newwin(1, FOOTER_WIDTH, TITLE_HEIGHT + GAME_WINDOW_HEIGHT + 1, LEFT_MARGIN)
+    col_pos = int((GAME_WINDOW_WIDTH + STATUS_WINDOW_WIDTH - len(title) + 1) / 2)
+    window.addstr(0, col_pos, title, curses.color_pair(98))
+    window.addstr(0, col_pos + len(title) + 1, "", curses.color_pair(97))
+
+    window.refresh()
+
+pause = False
+
+game_board = board.Board(BOARD_HEIGHT, BOARD_WIDTH)
+game_board.start()
+
+old_score = game_board.score
+
+if __name__ == "__main__":
+    try:
+        scr = curses.initscr()
+        curses.beep()
+        curses.noecho()
+        curses.cbreak()
+        curses.start_color()
+        curses.curs_set(0)
+
+        init_colors()
+
+        draw_title()
+        draw_footer()
+        draw_help_window()
+
+        game_window = init_game_window()
+        status_window = init_status_window()
+
+        draw_game_window(game_window)
+        draw_status_window(status_window)
+
+        start = time.time()
+
+        quit_game = False
+        while not quit_game:
+            key_event = game_window.getch()
+
+            # hack: redraw it on resize
+            if key_event == curses.KEY_RESIZE:
+                draw_footer()
+                draw_help_window()
+                draw_game_window(game_window)
+
+            if key_event == ord("q"):
+                quit_game = True
+
+            if not game_board.is_game_over():
+                if not pause:
+                    if time.time() - start >= 1 / game_board.level:
+                        game_board.move_block("down")
+                        start = time.time()
+
+                    if key_event == curses.KEY_UP:
+                        game_board.rotate_block()
+                    elif key_event == curses.KEY_DOWN:
+                        game_board.move_block("down")
+                    elif key_event == curses.KEY_LEFT:
+                        game_board.move_block("left")
+                    elif key_event == curses.KEY_RIGHT:
+                        game_board.move_block("right")
+                    elif key_event == ord(" "):
+                        game_board.drop()
+                if key_event == ord("p"):
+                    pause = not pause
+                    game_window.nodelay(not pause)
             else:
-                print(' ', end='')
-        print()
-        
-# Initialize the game state
-current_piece = get_random_piece()
-next_piece = get_random_piece()
+                curses.beep()
+                game_window.nodelay(False)
+                if key_event == ord("\n"):
+                    game_board.start()
+                    game_window.nodelay(True)
 
-# Start the game loop
-while not game_over:
-    # Handle user input
-    command = None
-    while command not in ['a', 'd', 's', 'q']:
-        print_board()
-        command = input('Press A to move left, D to move right, S to move down, Q to quit: ').lower()
-    if command == 'a':
-        new_position = (current_piece_position[0] - 1, current_piece_position[1])
-        if is_valid_position(current_piece, new_position):
-            remove_piece_from_board(current_piece, current_piece_position)
-            current_piece_position = new_position
-            add_piece_to_board(current_piece, current_piece_position)
-    elif command == 'd':
-        new_position = (current_piece_position[0] + 1, current_piece_position[1])
-        if is_valid_position(current_piece, new_position):
-            remove_piece_from_board(current_piece, current_piece_position)
-            current_piece_position = new_position
-            add_piece_to_board(current_piece, current_piece_position)
-    elif command == 's':
-        new_position = (current_piece_position[0], current_piece_position[1] + 1)
-        if is_valid_position(current_piece, new_position):
-            remove_piece_from_board(current_piece, current_piece_position)
-            current_piece_position = new_position
-            add_piece_to_board(current_piece, current_piece_position)
-        else:
-            # The current piece has landed, so add it to the board and clear any lines that it completes
-            add_piece_to_board(current_piece, current_piece_position)
-            clear_lines()
-            current_piece = next_piece
-            next_piece = get_random_piece()
-            current_piece_position = (BOARD_WIDTH // 2 - 1, 0)
-            if not is_valid_position(current_piece, current_piece_position):
-                game_over = True
-    elif command == 'q':
-        game_over = True
+            draw_game_window(game_window)
 
-    # Move the current piece down one row
-    if not game_over:
-        new_position = (current_piece_position[0], current_piece_position[1] + 1)
-        if is_valid_position(current_piece, new_position):
-            remove_piece_from_board(current_piece, current_piece_position)
-            current_piece_position = new_position
-            add_piece_to_board(current_piece, current_piece_position)
-        else:
-            # The current piece has landed, so add it to the board and clear any lines that it completes
-            add_piece_to_board(current_piece, current_piece_position)
-            clear_lines()
-            current_piece = next_piece
-            next_piece = get_random_piece()
-            current_piece_position = (BOARD_WIDTH // 2 - 1, 0)
-            if not is_valid_position(current_piece, current_piece_position):
-                game_over = True
-
-    # Wait for a short time to control the speed of the game
-    time.sleep(0.1)
-
-# Print the final game over message
-print_board()
-print('Game over! Your final score is:', score)
+            if old_score != game_board.score:
+                draw_status_window(status_window)
+                old_score = game_board.score
+    finally:
+        curses.endwin()
