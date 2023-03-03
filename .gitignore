@@ -3,3 +3,13 @@ __pycache__/
 *.py[cod]
 /best_score
 *.DS_Store
+build/tetris/Analysis-00.toc
+build/tetris/base_library.zip
+build/tetris/EXE-00.toc
+build/tetris/PKG-00.toc
+build/tetris/PYZ-00.pyz
+build/tetris/PYZ-00.toc
+build/tetris/tetris.pkg
+build/tetris/warn-tetris.txt
+build/tetris/xref-tetris.html
+dist/tetris
